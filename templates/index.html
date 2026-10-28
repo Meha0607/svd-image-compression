@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SVD Image Lab</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Centered page heading -->
+  <header class="top">
+    <h1>SVD IMAGE LAB</h1>
+    <p>Image compression and noise reduction with Singular Value Decomposition</p>
+  </header>
+
+  <!-- Tab buttons -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="upload">📤 Upload</button>
+    <button class="tab" data-tab="matrix">🔢 Matrix View</button>
+    <button class="tab" data-tab="values">📈 Singular Values</button>
+    <button class="tab" data-tab="compress">🗜️ Compression</button>
+    <button class="tab" data-tab="noise">🔇 Noise Reduction</button>
+  </nav>
+
+  <main class="box" id="box">
+
+    <!-- 1. UPLOAD -->
+    <section class="panel active" id="tab-upload">
+      <h2>Upload an image</h2>
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <div class="drop-icon">🖼️</div>
+        <div>Drag and drop an image here, or <u>choose a file</u></div>
+        <small>PNG, JPG or BMP</small>
+      </label>
+      <div class="preview hidden" id="preview">
+        <img id="previewImg" alt="Uploaded image preview">
+        <div id="previewInfo" class="muted"></div>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <progress class="hidden" id="uploadProgress" max="100" value="0"></progress>
+    </section>
+
+    <!-- 2. MATRIX VIEW -->
+    <section class="panel" id="tab-matrix">
+      <div class="empty">Upload an image first.</div>
+      <div class="content">
+        <h2>Top-left 6×6 pixel block</h2>
+        <div class="scroll"><table id="pixTable"></table></div>
+        <div class="cards">
+          <div class="card"><b id="rankVal">–</b><span>Rank</span></div>
+          <div class="card"><b id="nullVal">–</b><span>Nullity</span></div>
+        </div>
+        <h3>RREF of the block</h3>
+        <div class="scroll" id="rrefOut"></div>
+        <h3>Null space basis <small>(one vector per row)</small></h3>
+        <div class="scroll" id="basisOut"></div>
+        <h3>Gram-Schmidt <small>(one vector per row)</small></h3>
+        <div class="scroll" id="gsOut"></div>
+      </div>
+    </section>
+
+    <!-- 3. SINGULAR VALUES -->
+    <section class="panel" id="tab-values">
+      <div class="empty">Upload an image first.</div>
+      <div class="content">
+        <h2>Singular values</h2>
+        <div class="chart-wrap"><canvas id="svChart"></canvas></div>
+        <p class="muted">Dashed line = chosen k: <b id="kMarkerText">–</b></p>
+      </div>
+    </section>
+
+    <!-- 4. COMPRESSION -->
+    <section class="panel" id="tab-compress">
+      <div class="empty">Upload an image first.</div>
+      <div class="content">
+        <h2>Compression</h2>
+
+        <div class="toggle" id="compToggle">
+          <button class="active" data-mode="manual">Manual</button>
+          <button data-mode="auto">Auto</button>
+        </div>
+
+        <!-- Manual: slider only -->
+        <div class="controls" id="compManual">
+          <label>k = <b id="kLabel">20</b></label>
+          <input type="range" id="kSlider" min="1" max="100" value="20">
+        </div>
+
+        <!-- Auto: the server picks k, so no slider here -->
+        <div class="controls hidden" id="compAuto">
+          <select id="methodSel">
+            <option value="energy">Energy %</option>
+            <option value="ratio">Target ratio</option>
+            <option value="elbow">Elbow</option>
+          </select>
+          <input type="number" id="paramInput" value="95" min="1" step="any">
+          <button class="btn" id="findK">Suggest k</button>
+          <button class="btn hidden" id="applySuggestedK">Apply suggested k</button>
+        </div>
+
+        <p class="reason" id="compReason"></p>
+
+        <div class="image-pair">
+          <figure><img id="cmpOrig" alt="Original image"><figcaption>Original</figcaption></figure>
+          <figure><img id="cmpComp" alt="Compressed image"><figcaption>Compressed</figcaption></figure>
+        </div>
+
+        <div class="cards">
+          <div class="card"><b id="mK">–</b><span>k</span></div>
+          <div class="card"><b id="mRatio">–</b><span>Compression ratio</span></div>
+          <div class="card"><b id="mEnergy">–</b><span>Energy</span></div>
+          <div class="card"><b id="mMse">–</b><span>MSE (original vs compressed)</span></div>
+          <div class="card"><b id="mPsnr">–</b><span>PSNR (original vs compressed)</span></div>
+          <div class="card"><b id="mSsim">–</b><span>SSIM (original vs compressed)</span></div>
+        </div>
+        <p class="muted" id="compFileStats">Actual PNG file savings: –</p>
+        <a class="btn download hidden" id="downloadCompressed" download>Download processed image</a>
+      </div>
+    </section>
+
+    <!-- 5. NOISE REDUCTION -->
+    <section class="panel" id="tab-noise">
+      <div class="empty">Upload an image first.</div>
+      <div class="content">
+        <h2>Noise reduction</h2>
+
+        <h3>1. Add noise</h3>
+        <div class="controls">
+          <select id="noiseKind">
+            <option value="gaussian">Gaussian</option>
+            <option value="saltpepper">Salt &amp; pepper</option>
+          </select>
+          <label id="noiseLevelName">Gaussian standard deviation = <b id="levelLabel">30</b></label>
+          <input type="range" id="levelSlider" min="0" max="100" value="30">
+          <button class="btn" id="addNoise">Add noise</button>
+        </div>
+
+        <h3>2. Remove noise</h3>
+        <div class="controls">
+          <span class="muted">Denoise processes the current image: your upload, or the noisy image after Add Noise.</span>
+          <button class="btn" id="runDenoise">Denoise current image</button>
+        </div>
+
+        <p class="reason" id="denReason"></p>
+
+        <div class="image-pair">
+          <figure><img id="nOrig" alt="Input image"><figcaption id="nInputCaption">Uploaded image</figcaption></figure>
+          <figure><img id="nProcessed" alt="Processed image"><figcaption id="nProcessedCaption">Processed</figcaption></figure>
+        </div>
+
+        <div class="cards">
+          <div class="card"><b id="dK">–</b><span>k used</span></div>
+          <div class="card"><b id="nMse">–</b><span>Noisy MSE</span></div>
+          <div class="card"><b id="nPsnr">–</b><span>Noisy PSNR</span></div>
+          <div class="card"><b id="nSsim">–</b><span>Noisy SSIM</span></div>
+          <div class="card"><b id="dMse">–</b><span>Denoised MSE</span></div>
+          <div class="card"><b id="dPsnr">–</b><span>Denoised PSNR</span></div>
+          <div class="card"><b id="dSsim">–</b><span>Denoised SSIM</span></div>
+        </div>
+        <p class="muted" id="denFileStats">Actual PNG file savings: –</p>
+        <a class="btn download hidden" id="downloadDenoised" download>Download processed image</a>
+        <button class="btn hidden" id="toggleNoiseCompare">Compare noisy vs denoised</button>
+        <div class="image-pair hidden" id="noiseCompare">
+          <figure><img id="nCompareNoisy" alt="Noisy image"><figcaption>Noisy</figcaption></figure>
+          <figure><img id="nCompareDenoised" alt="Denoised image"><figcaption>Denoised</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
